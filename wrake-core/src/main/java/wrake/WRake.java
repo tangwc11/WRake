@@ -20,18 +20,15 @@ public class WRake<R> {
 
     private final List<WTask<?>> tasks = new ArrayList<>(100);
     private final Queue<Node> readyQueue = new MpscArrayQueue<>(100);//thread-safe
+    private final AtomicInteger total = new AtomicInteger(0);
     private final AtomicInteger finished = new AtomicInteger(0);
-    private int total;
     private final AtomicReference<Optional<R>> taskTermRes = new AtomicReference<>(Optional.empty());
-    //避免结束后被线程池任务唤醒影响下次编排
+    //避免结束后仍被线程池任务唤醒影响下次编排
     private volatile boolean exit;
-    //用于快速结束剩余任务
     private final AtomicReference<Throwable> throwable = new AtomicReference<>();
     private final AtomicLong waited = new AtomicLong(0);
 
     //构建node依赖网格
-    int i = 1;
-
     private void buildGridAndReadyQueue() {
         readyQueue(buildGrid());
     }
@@ -47,22 +44,20 @@ public class WRake<R> {
     private Map<WTask<?>, Node> buildGrid() {
         Map<WTask<?>, Node> tnMap = Maps.newHashMapWithExpectedSize(16);
         for (WTask<?> task : tasks) {
-            Node existNode = tnMap.get(task);
-            if (existNode != null) {
+            Node node = tnMap.get(task);
+            if (node != null) {
                 continue;
             }
 
-            Node node = new Node().setTask(task).setName("task" + (i++));
+            node = new Node().setTask(task);
             tnMap.put(task, node);
             if (CollectionUtils.isEmpty(task.getDepends())) {
                 continue;
             }
             for (WTask<?> depend : task.getDepends()) {
-                Node dep = tnMap.get(depend);
-                if (dep == null) {
-                    dep = new Node().setTask(depend);
-                    tnMap.put(depend, dep);
-                }
+                Node dep = tnMap.computeIfAbsent(
+                        depend, wTask -> new Node().setTask(depend)
+                );
                 node.addPrev(dep);
                 dep.addNext(node);
             }
@@ -103,7 +98,7 @@ public class WRake<R> {
             buildGridAndReadyQueue();
             do {
                 while (!readyQueue.isEmpty()) {
-                    runNode(executor, readyQueue.poll());
+                    dispatch(executor, readyQueue.poll());
                 }
                 doPark(waitNs, false);
             } while (!needBreak());
@@ -159,14 +154,14 @@ public class WRake<R> {
     }
 
     private boolean finished() {
-        return finished.get() == total;
+        return finished.get() == total.get();
     }
 
     private boolean termed() {
         return taskTermRes.get() != Optional.empty();
     }
 
-    private void runNode(ExecutorService executor, Node node) {
+    private void dispatch(ExecutorService executor, Node node) {
         Thread thread = Thread.currentThread();
         executor.submit(() -> {
             try {
@@ -183,9 +178,9 @@ public class WRake<R> {
         boolean needUnPark = true;
         try {
             if (termed() || isExit() || existThrowable()) {
-                // 中断：至少有一次唤醒，主线程会检验中断并退出，此次不需要执行且不需要唤醒
+                // 中断：至少有过一次唤醒，主线程会检验中断并退出，此次不需要执行且不需要唤醒
                 // 退出：主线程已经退出，不需要执行且唤醒。
-                // 异常：至少有一次唤醒，主线程会检验异常并退出，此次不需要执行且不需要唤醒
+                // 异常：至少有过一次唤醒，主线程会检验异常并退出，此次不需要执行且不需要唤醒
                 needUnPark = false;
                 return;
             }
@@ -230,7 +225,7 @@ public class WRake<R> {
     }
 
     private boolean incrAndQueue(Node node) {
-        if (finished.incrementAndGet() == total) {
+        if (finished.incrementAndGet() == total.get()) {
             return true;
         }
         Set<Node> ns = node.getNextNodes();
@@ -249,7 +244,7 @@ public class WRake<R> {
     public <T> WTask<T> defTask(@Nonnull Callable<T> callable) {
         WTask<T> task = new WTask<T>().setCallable(callable);
         tasks.add(task);
-        total++;
+        total.incrementAndGet();
         return task;
     }
 
