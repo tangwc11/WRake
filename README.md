@@ -115,7 +115,7 @@ Scene6_Benchmark.wrake(4-threads)                       avgt    4  31.994 ± 0.9
 Scene6_Benchmark.wrake(ForkJoinCommonPool)              avgt    4  32.144 ± 3.100  ms/op
 ```
 
-benchmark样例见：[benchmark](https://github.com/wentry18/wRake/tree/master/wrake-sample/src/main/java/wrake/samples/scene6_benchmark)
+benchmark样例见：[benchmark](https://github.com/tangwc11/WRake/blob/master/wrake-sample/src/main/java/wrake/samples/scene6_benchmark/Scene6_Benchmark.java)
 
 ## 5.使用及建议
 
