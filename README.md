@@ -75,7 +75,7 @@ public static Result<String> wrake() {
 
 如上，整个过程分为两步，定义+触发。
 
-更多的调用示例代码，请参考：[wrake-samples](https://github.com/wentry18/wrake/tree/master/wrake-sample)模块。
+更多的调用示例代码，请参考：[wrake-samples](https://github.com/tangwc11/WRake/tree/master/wrake-sample/src/main/java/wrake/samples)模块。
 
 ## 2.特性
 
